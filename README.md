@@ -4,7 +4,7 @@ A project that allows clients to achieve almost real-time communication between 
 
 ## How to run the application
 
-- Clone the Git repository to your local machine using the command `git clone https://github.com/kipraskrasilnikas/infocenter/`
+- Clone the Git repository to your local machine using the command `git clone https://github.com/kipraskrasilnikas/infocenter-go/`
 - Open a terminal or command prompt and navigate to the directory where you cloned the repository.
 - Run the command `go build -o infocenter.exe` to build the executable file.
 - Run the command `./infocenter.exe` to launch the project. This will start the server on port 8080.
