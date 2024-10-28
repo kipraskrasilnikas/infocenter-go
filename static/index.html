@@ -43,55 +43,34 @@
             var url = 'http://localhost:8080/infocenter/';
 
             function write_message(e) {
-                var messageDiv = $("<div></div>").addClass("message");
-                var messageContent = `
-                    <strong>Id:</strong> ${e.lastEventId} <br>
-                    <strong>Event:</strong> ${e.type} <br>
-                    <strong>Message:</strong> ${e.data} <br><br>
-                `;
-                messageDiv.html(messageContent);
-                $("#messageBox").append(messageDiv);
-                $("#messageBox").scrollTop($("#messageBox")[0].scrollHeight);
+                $("#messageBox").append(
+                    `<div><strong>Id:</strong> ${e.lastEventId}<br>
+                    <strong>Event:</strong> ${e.type}<br>
+                    <strong>Message:</strong> ${e.data}</div><br>`
+                ).scrollTop($("#messageBox")[0].scrollHeight);
             }
 
             $('#subscribe').on('click', function(e) {
                 e.preventDefault();
-                if (es != null) {
-                    es.close();
-                }
-
-                var topic = $('#topic').val();
-
-                if (!topic) {
-                    alert('Please input a topic');
-                    return; // Exit if the topic is empty or undefined
-                }
+                const topic = $('#topic').val().trim();
+                
+                if (!topic) return alert('Please input a topic');
+                if (es) es.close();
 
                 es = new EventSource(`${url}${topic}`);
-
                 es.addEventListener('msg', write_message);
                 es.addEventListener('timeout', write_message);
 
                 es.onerror = function(event) {
-                    console.error('EventSource failed:', event);
-                    // Check for additional error details
-                    if (event.readyState === EventSource.CLOSED) {
-                        console.error('EventSource connection closed.');
-                    } else if (event.readyState === EventSource.CONNECTING) {
-                        console.error('EventSource connecting...');
-                    }
-                   es.close(); // Close on error
+                    console.error('EventSource failed:', e);
+                    es.close();
                 };
             });
 
             $('#sendMessage').on('click', function(e) {
-                var topic = $('#topic').val(); // Get the value of the #topic input
-                var message = $('#message').val();
-
-                if (!message) {
-                    alert('Please input a message');
-                    return
-                }
+                const topic = $('#topic').val().trim();
+                const message = $('#message').val().trim();
+                if (!message) return alert('Please input a message');
 
                 $.ajax({
                     url: `${url}${topic}`,
