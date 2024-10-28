@@ -52,10 +52,6 @@ func infocenterHandler(w http.ResponseWriter, r *http.Request) {
 
 // TO DO: Remake this to handle multiple clients
 func receiveMessages(w http.ResponseWriter, topic string) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
