@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type Message struct {
@@ -12,49 +14,23 @@ type Message struct {
 	Content string
 }
 
-type Client struct {
-	ID   int
-	Conn http.ResponseWriter
-	Ch   chan Message
-}
-
 var (
-	topics    = make(map[string][]Client)
-	messageId int
 	mu        sync.Mutex
+	topics    = make(map[string]chan Message)
+	messageId int
 )
 
 func main() {
 	fmt.Println("Starting Infocenter Service...")
 	fmt.Println("Server is running at http://localhost:8080/infocenter")
 
+	// Serve static files from the "static" directory
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+
 	// Registering handlers
 	http.HandleFunc("/infocenter/", infocenterHandler)
-
-	// http.HandleFunc("/infocenter/", receiveMessages) // Note: Route should differentiate based on method (GET/POST)
-
 	http.ListenAndServe(":8080", nil)
-}
-
-func homepageHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html") // Set the content type to HTML
-	fmt.Fprintln(w, "<html>")
-	fmt.Fprintln(w, "<head><title>Infocenter Service</title></head>")
-	fmt.Fprintln(w, "<body>")
-	fmt.Fprintln(w, "<h1>Welcome to the Infocenter Service!</h1>")
-	fmt.Fprintln(w, "<h2>Instructions:</h2>")
-	fmt.Fprintln(w, "<p>To subscribe to a topic, use:</p>")
-	fmt.Fprintln(w, "<pre>GET /infocenter/{topic}</pre>")
-	fmt.Fprintln(w, "<p>Replace <strong>{topic}</strong> with the name of your topic.</p>")
-	fmt.Fprintln(w, "<p>You can send messages to a topic using:</p>")
-	fmt.Fprintln(w, "<pre>POST /infocenter/{topic}</pre>")
-	fmt.Fprintln(w, "<p>with the message in the body (plain text, not JSON).</p>")
-	fmt.Fprintln(w, "<h3>Example:</h3>")
-	fmt.Fprintln(w, "<pre>POST /infocenter/suniukai</pre>")
-	fmt.Fprintln(w, "<pre>Body: labas</pre>")
-	fmt.Fprintln(w, "<p>You can test this using Postman or any HTTP client.</p>")
-	fmt.Fprintln(w, "</body>")
-	fmt.Fprintln(w, "</html>")
 }
 
 func infocenterHandler(w http.ResponseWriter, r *http.Request) {
@@ -66,13 +42,95 @@ func infocenterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		// Handle subscription to messages
-		// receiveMessages(w, r, topic)
+		receiveMessages(w, topic)
 	} else if r.Method == http.MethodPost {
-		// Handle sending messages
-		// sendMessage(w, r, topic)
+		sendMessage(w, r, topic)
 	} else {
-		// Handle unsupported methods
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// TO DO: Remake this to handle multiple clients
+func receiveMessages(w http.ResponseWriter, topic string) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	mu.Lock()
+	if _, exists := topics[topic]; !exists {
+		topics[topic] = make(chan Message)
+	}
+	mu.Unlock()
+
+	fmt.Printf("Listening to topic: %s\n", topic)
+	ch := topics[topic]
+
+	timeoutTime := 5
+	timeout := time.After(time.Duration(timeoutTime) * time.Second)
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return // Channel is closed, exit
+			}
+
+			fmt.Fprintf(w, "id: %d\nevent: msg\ndata: %s\n\n", msg.ID, msg.Content)
+			w.(http.Flusher).Flush()
+		case <-timeout:
+			// Send a timeout event before disconnecting
+			fmt.Fprintf(w, "event: timeout\ndata: %ds\n\n", timeoutTime)
+			w.(http.Flusher).Flush() // Flush the response writer
+
+			cleanupTopic(topic)
+			return
+		}
+	}
+}
+
+// Potential improvement: save messages when clients are not listening and let clients catch up after they start
+func sendMessage(w http.ResponseWriter, r *http.Request, topic string) {
+	body, err := io.ReadAll(r.Body)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	mu.Lock()
+
+	if ch, exists := topics[topic]; exists {
+		messageId++ // Increment the message ID
+		message := Message{ID: messageId, Topic: topic, Content: string(body)}
+
+		// Send the message to the channel for this topic
+		select {
+		case ch <- message:
+			// Message sent successfully
+		default:
+			// If the channel is full, skip send to avoid blocking
+			fmt.Printf("Message dropped for topic: %s\n", topic)
+		}
+	}
+
+	mu.Unlock()
+
+	w.WriteHeader(http.StatusNoContent) // Send HTTP 204 No Content response
+}
+
+func homepageHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/index.html") // Serve the static HTML file
+}
+
+func cleanupTopic(topic string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if ch, exists := topics[topic]; exists {
+		close(ch)
+		delete(topics, topic)
 	}
 }
