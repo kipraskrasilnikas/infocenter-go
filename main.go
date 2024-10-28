@@ -83,7 +83,7 @@ func receiveMessages(w http.ResponseWriter, topic string) {
 			w.(http.Flusher).Flush()
 		case <-timeout:
 			// Send a timeout event before disconnecting
-			fmt.Fprintf(w, "event: timeout\ndata: %ds\n\n", timeoutTime)
+			fmt.Fprintf(w, "id: %d\nevent: timeout\ndata: %ds\n\n", messageId, timeoutTime)
 			w.(http.Flusher).Flush() // Flush the response writer
 
 			cleanupTopic(topic)
@@ -118,7 +118,6 @@ func sendMessage(w http.ResponseWriter, r *http.Request, topic string) {
 	}
 
 	mu.Unlock()
-
 	w.WriteHeader(http.StatusNoContent) // Send HTTP 204 No Content response
 }
 
