@@ -14,8 +14,8 @@ A project that allows clients to achieve almost real-time communication between 
 
 - The `main.go` file contains the entry point for the program. It starts an HTTP server, registers an HTTP request handler for the `/infocenter/` endpoint.
 - The homepage is shown to the user with the topic and message input fields, subscribe and send message buttons and a box for incoming messages.
-- When a client inputs a topic and clicks the "Subscribe to topic" button, a `GET` request is made to the `/infocenter/<topic>` endpoint. This creates a channel for the topic in the topics map and opens a persistent connection which listens for events in text/event-stream format.
+- When a client inputs a topic and clicks the "Subscribe to topic" button, a `GET` request is made to the `/infocenter/<topic>` endpoint. This creates a channel for the topic in the topics map and opens a persistent connection, which listens for events in text/event-stream format.
 - When a client adds a message, topic and clicks "Send message", a `POST` request is made to the `/infocenter/<topic>` endpoint. This creates an incremented message object, sends it to the corresponding channel (topic) and returns HTTP status code 204.
-- If the topic is subscribed to, it is sent as an SSE (Server-sent event) to the response of the `GET` request and the message is shown to the subscribed user.
+- If the topic is subscribed to, the message is sent as an SSE (Server-sent event) to the `GET` request response. The message is shown to the subscribed user.
 - The subscription times out after 30 seconds. The topic is deleted from the topics map and the channel is closed.
-- All `message` object and `topics` map operations are protected by a `mutex` to allow concurrent read access and exclusive write access.
+- All `Message` object and `topics` map operations are protected by a `sync.Mutex` to allow concurrent read access and exclusive write access.
