@@ -69,7 +69,7 @@ func receiveMessages(w http.ResponseWriter, topic string) {
 	fmt.Printf("Listening to topic: %s\n", topic)
 	ch := topics[topic]
 
-	timeoutTime := 5
+	timeoutTime := 30
 	timeout := time.After(time.Duration(timeoutTime) * time.Second)
 
 	for {
