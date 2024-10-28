@@ -16,7 +16,7 @@ type Message struct {
 
 var (
 	mu        sync.Mutex
-	topics    = make(map[string]chan Message)
+	topics    = make(map[string][]chan Message)
 	messageId int
 )
 
@@ -56,14 +56,13 @@ func receiveMessages(w http.ResponseWriter, topic string) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
+	ch := make(chan Message)
+
 	mu.Lock()
-	if _, exists := topics[topic]; !exists {
-		topics[topic] = make(chan Message)
-	}
+	topics[topic] = append(topics[topic], ch)
 	mu.Unlock()
 
 	fmt.Printf("Listening to topic: %s\n", topic)
-	ch := topics[topic]
 
 	timeoutTime := 30
 	timeout := time.After(time.Duration(timeoutTime) * time.Second)
@@ -82,7 +81,7 @@ func receiveMessages(w http.ResponseWriter, topic string) {
 			fmt.Fprintf(w, "id: %d\nevent: timeout\ndata: %ds\n\n", messageId, timeoutTime)
 			w.(http.Flusher).Flush() // Flush the response writer
 
-			cleanupTopic(topic)
+			cleanupTopic(topic, ch)
 			return
 		}
 	}
@@ -98,22 +97,25 @@ func sendMessage(w http.ResponseWriter, r *http.Request, topic string) {
 	}
 
 	mu.Lock()
+	defer mu.Unlock()
 
-	if ch, exists := topics[topic]; exists {
-		messageId++ // Increment the message ID
-		message := Message{ID: messageId, Topic: topic, Content: string(body)}
+	messageId++ // Increment the message ID
+	message := Message{ID: messageId, Topic: topic, Content: string(body)}
 
-		// Send the message to the channel for this topic
-		select {
-		case ch <- message:
-			// Message sent successfully
-		default:
-			// If the channel is full, skip send to avoid blocking
-			fmt.Printf("Message dropped for topic: %s\n", topic)
+	if chs, exists := topics[topic]; exists {
+		// Send the message to all channels of topic
+		for _, ch := range chs {
+			select {
+			case ch <- message:
+				// Message sent successfully
+			default:
+				// If the channel is full, skip send to avoid blocking
+				fmt.Fprintf(w, "id: %d\nevent: msg\ndata: Message %d dropped for topic: %s\n\n", messageId, messageId, topic)
+				w.(http.Flusher).Flush()
+			}
 		}
 	}
 
-	mu.Unlock()
 	w.WriteHeader(http.StatusNoContent) // Send HTTP 204 No Content response
 }
 
@@ -121,11 +123,21 @@ func homepageHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./static/index.html") // Serve the static HTML file
 }
 
-func cleanupTopic(topic string) {
+// Cleanup function to remove closed channels for a specific topic
+func cleanupTopic(topic string, chToRemove chan Message) {
 	mu.Lock()
 	defer mu.Unlock()
-	if ch, exists := topics[topic]; exists {
-		close(ch)
-		delete(topics, topic)
+
+	if chs, exists := topics[topic]; exists {
+		// Create a new slice to hold active channels
+		var activeChannels []chan Message
+		for _, ch := range chs {
+			if ch != chToRemove {
+				activeChannels = append(activeChannels, ch) // Keep active channels
+			} else {
+				close(ch) // Close the channel being removed
+			}
+		}
+		topics[topic] = activeChannels // Update the map with active channels
 	}
 }
