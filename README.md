@@ -1,6 +1,6 @@
 # InfoCenter
 
-A project that allows clients to achieve almost real-time communication between each other by sending messages, using concurrency to send or receive messages at the same time.
+A project that allows clients to achieve almost real-time communication between each other by sending messages (using Server Sent Events), using concurrency to send or receive messages at the same time.
 
 ## How to run the application
 
